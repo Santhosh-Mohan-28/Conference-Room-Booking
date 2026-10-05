@@ -1,0 +1,89 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  ADMIN
+  EMPLOYEE
+}
+
+enum BookingStatus {
+  CONFIRMED
+  CANCELLED
+}
+
+model User {
+  id                String     @id @default(cuid())
+  microsoftUserId   String?    @unique
+  microsoftTenantId String?
+  name              String
+  email             String     @unique
+  role              Role       @default(EMPLOYEE)
+  isActive          Boolean    @default(true)
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  bookings          Booking[]
+  auditLogs         AuditLog[]
+
+  @@index([email])
+  @@index([microsoftUserId, microsoftTenantId])
+}
+
+model Room {
+  id          String    @id @default(cuid())
+  roomCode    String    @unique
+  name        String
+  building    String
+  floor       Int
+  capacity    Int
+  description String?
+  equipment   String[]
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  bookings    Booking[]
+
+  @@index([isActive])
+  @@index([building, floor])
+}
+
+model Booking {
+  id            String        @id @default(cuid())
+  roomId        String
+  room          Room          @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  createdById   String
+  createdBy     User          @relation(fields: [createdById], references: [id])
+  organizerName String
+  title         String
+  description   String?
+  startTime     DateTime
+  endTime       DateTime
+  status        BookingStatus @default(CONFIRMED)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  cancelledAt   DateTime?
+
+  @@index([roomId, startTime, endTime])
+  @@index([startTime, endTime])
+  @@index([status])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actorEmail String?
+  actor      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action     String
+  targetType String
+  targetId   String
+  details    Json?
+  createdAt  DateTime @default(now())
+
+  @@index([targetType, targetId])
+  @@index([createdAt])
+}
