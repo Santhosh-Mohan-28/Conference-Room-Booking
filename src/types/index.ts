@@ -1,5 +1,6 @@
 export type Role = "ADMIN" | "EMPLOYEE";
 export type BookingStatus = "CONFIRMED" | "CANCELLED";
+export type BookingRequestStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
 
 export interface UserSession {
   id: string;
@@ -47,6 +48,36 @@ export interface BookingData {
   cancelledAt: string | Date | null;
 }
 
+export interface BookingRequestData {
+  id: string;
+  requesterId: string;
+  requester?: {
+    id: string;
+    name: string;
+    email: string;
+    role: Role;
+  };
+  roomId: string;
+  room?: RoomData;
+  title: string;
+  description: string | null;
+  startTime: string | Date;
+  endTime: string | Date;
+  status: BookingRequestStatus;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+  reviewedAt?: string | Date | null;
+  reviewedById?: string | null;
+  reviewedBy?: {
+    id: string;
+    name: string;
+    email: string;
+  } | null;
+  rejectionReason?: string | null;
+  bookingId?: string | null;
+  booking?: BookingData | null;
+}
+
 export interface RoomAvailabilitySlot {
   roomId: string;
   roomCode: string;
@@ -71,6 +102,7 @@ export interface DashboardStats {
   occupiedRoomsNow: number;
   todayBookingsCount: number;
   upcomingBookingsCount: number;
+  pendingRequestsCount?: number;
   todayBookings: BookingData[];
   upcomingBookings: BookingData[];
   recentActivity?: {
@@ -81,4 +113,22 @@ export interface DashboardStats {
     details: any;
     createdAt: string | Date;
   }[];
+}
+
+export interface ChatPendingAction {
+  roomId: string;
+  roomName: string;
+  roomCode: string;
+  date: string; // YYYY-MM-DD
+  startTime: string; // HH:mm (24-hour)
+  endTime: string; // HH:mm (24-hour)
+  formattedDate: string; // e.g. "October 7, 2026"
+  title: string;
+  description?: string | null;
+  organizerName?: string;
+  userId: string;
+  userRole: Role;
+  startUTC: string; // ISO string
+  endUTC: string; // ISO string
+  confirmationRequired: boolean;
 }

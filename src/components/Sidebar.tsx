@@ -14,6 +14,9 @@ import {
   FileText,
   X,
   PlusCircle,
+  Inbox,
+  Clock,
+  Send,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -32,47 +35,86 @@ export function Sidebar({ user, isOpen, onClose }: SidebarProps) {
       href: "/dashboard",
       icon: LayoutDashboard,
       adminOnly: false,
+      employeeOnly: false,
     },
     {
       label: "Conference Rooms",
       href: "/rooms",
       icon: DoorOpen,
       adminOnly: false,
+      employeeOnly: false,
     },
     {
       label: "Room Availability",
       href: "/availability",
       icon: CalendarDays,
       adminOnly: false,
+      employeeOnly: false,
     },
+    // Admin direct booking
     {
       label: "Book Room",
       href: "/bookings/new",
       icon: CalendarPlus,
       adminOnly: true,
+      employeeOnly: false,
       highlight: true,
     },
+    // Admin booking request management
+    {
+      label: "Booking Requests",
+      href: "/booking-requests",
+      icon: Inbox,
+      adminOnly: true,
+      employeeOnly: false,
+    },
+    // Employee booking request creation
+    {
+      label: "Book Conference",
+      href: "/bookings/request",
+      icon: CalendarPlus,
+      adminOnly: false,
+      employeeOnly: true,
+      highlight: true,
+    },
+    // Employee viewing their own requests
+    {
+      label: "My Requests",
+      href: "/booking-requests/my",
+      icon: Clock,
+      adminOnly: false,
+      employeeOnly: true,
+    },
+    // Admin confirmed bookings management
     {
       label: "Manage Bookings",
       href: "/bookings",
       icon: ClipboardList,
       adminOnly: true,
+      employeeOnly: false,
     },
+    // Admin audit logs
     {
       label: "Audit Logs",
       href: "/audit-logs",
       icon: FileText,
       adminOnly: true,
+      employeeOnly: false,
     },
     {
       label: "Profile",
       href: "/profile",
       icon: UserCircle,
       adminOnly: false,
+      employeeOnly: false,
     },
   ];
 
-  const visibleNav = navItems.filter((item) => !item.adminOnly || isAdmin);
+  const visibleNav = navItems.filter((item) => {
+    if (item.adminOnly && !isAdmin) return false;
+    if (item.employeeOnly && isAdmin) return false;
+    return true;
+  });
 
   const sidebarContent = (
     <div className="flex h-full flex-col justify-between py-5 px-3">
@@ -98,6 +140,20 @@ export function Sidebar({ user, isOpen, onClose }: SidebarProps) {
             >
               <PlusCircle className="w-4 h-4" />
               <span>Add Conference Room</span>
+            </Link>
+          </div>
+        )}
+
+        {/* Quick Employee Action */}
+        {!isAdmin && (
+          <div className="px-2">
+            <Link
+              href="/bookings/request"
+              onClick={onClose}
+              className="flex items-center justify-center space-x-2 w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs font-semibold shadow-md shadow-blue-500/20 hover:from-blue-700 hover:to-indigo-700 transition-all"
+            >
+              <CalendarPlus className="w-4 h-4" />
+              <span>Book Conference</span>
             </Link>
           </div>
         )}
@@ -149,8 +205,8 @@ export function Sidebar({ user, isOpen, onClose }: SidebarProps) {
           </div>
           <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
             {isAdmin
-              ? "Full room scheduling, room management, and audit rights."
-              : "Room inspection & real-time booking availability view."}
+              ? "Full room scheduling, request authorization, and audit rights."
+              : "Conference room requests, live availability view, and status tracking."}
           </p>
         </div>
       </div>

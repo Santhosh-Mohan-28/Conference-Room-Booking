@@ -14,6 +14,8 @@ import {
 } from "@/lib/timezone";
 import { addDays } from "date-fns";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth();
@@ -113,7 +115,19 @@ export async function GET(req: NextRequest) {
       status: b.status,
     }));
 
-    // 4. Admin specific: Recent audit activity
+    // 4. Pending booking requests count
+    let pendingRequestsCount = 0;
+    if (user.role === "ADMIN") {
+      pendingRequestsCount = await prisma.bookingRequest.count({
+        where: { status: "PENDING" },
+      });
+    } else {
+      pendingRequestsCount = await prisma.bookingRequest.count({
+        where: { requesterId: user.id, status: "PENDING" },
+      });
+    }
+
+    // 5. Admin specific: Recent audit activity
     let recentActivity = null;
     if (user.role === "ADMIN") {
       recentActivity = await prisma.auditLog.findMany({
@@ -141,6 +155,7 @@ export async function GET(req: NextRequest) {
         occupiedRoomsNow,
         todayBookingsCount: todayBookings.length,
         upcomingBookingsCount: upcomingBookings.length,
+        pendingRequestsCount,
       },
       todayBookings,
       upcomingBookings,

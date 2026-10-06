@@ -46,24 +46,23 @@ describe("Enterprise Conference Room Booking System - Core Automated Test Suite"
       },
     });
 
-    // Clean up any existing test rooms/bookings with code TEST-RM-1
+    // Clean up any existing test rooms/bookings with code TEST-RM-
     await prisma.booking.deleteMany({
-      where: { room: { roomCode: { startsWith: "TEST-" } } },
+      where: { room: { roomCode: { startsWith: "TEST-RM-" } } },
     });
     await prisma.room.deleteMany({
-      where: { roomCode: { startsWith: "TEST-" } },
+      where: { roomCode: { startsWith: "TEST-RM-" } },
     });
   });
 
   after(async () => {
-    // Cleanup
+    // Cleanup test-specific rooms
     await prisma.booking.deleteMany({
-      where: { room: { roomCode: { startsWith: "TEST-" } } },
+      where: { room: { roomCode: { startsWith: "TEST-RM-" } } },
     });
     await prisma.room.deleteMany({
-      where: { roomCode: { startsWith: "TEST-" } },
+      where: { roomCode: { startsWith: "TEST-RM-" } },
     });
-    await prisma.$disconnect();
   });
 
   // Scenario 1: An administrator can create a conference room
@@ -371,10 +370,13 @@ describe("Enterprise Conference Room Booking System - Core Automated Test Suite"
 
   // Scenario 13: Inactive rooms cannot be booked
   it("Scenario 13: Inactive rooms cannot be booked", async () => {
+    // Clean up if already exists
+    await prisma.room.deleteMany({ where: { roomCode: "TEST-RM-INACTIVE-1" } });
+
     // Create an inactive room
     const inactiveRoom = await prisma.room.create({
       data: {
-        roomCode: "TEST-INACTIVE-1",
+        roomCode: "TEST-RM-INACTIVE-1",
         name: "Deactivated Testing Chamber",
         building: "Tower Beta",
         floor: 1,
@@ -384,23 +386,27 @@ describe("Enterprise Conference Room Booking System - Core Automated Test Suite"
       },
     });
 
-    await assert.rejects(
-      async () => {
-        await createBooking({
-          roomId: inactiveRoom.id,
-          createdById: adminUser.id,
-          organizerName: "Tester",
-          title: "Attempted Booking on Inactive Room",
-          startTime: new Date("2027-01-11T10:00:00Z"),
-          endTime: new Date("2027-01-11T11:00:00Z"),
-        });
-      },
-      (err: any) => {
-        assert.ok(err instanceof ValidationError);
-        assert.match(err.message, /deactivated/i);
-        return true;
-      }
-    );
+    try {
+      await assert.rejects(
+        async () => {
+          await createBooking({
+            roomId: inactiveRoom.id,
+            createdById: adminUser.id,
+            organizerName: "Tester",
+            title: "Attempted Booking on Inactive Room",
+            startTime: new Date("2027-01-11T10:00:00Z"),
+            endTime: new Date("2027-01-11T11:00:00Z"),
+          });
+        },
+        (err: any) => {
+          assert.ok(err instanceof ValidationError);
+          assert.match(err.message, /deactivated/i);
+          return true;
+        }
+      );
+    } finally {
+      await prisma.room.deleteMany({ where: { roomCode: "TEST-RM-INACTIVE-1" } });
+    }
   });
 
   // Scenario 14: Historical bookings remain intact after room deactivation

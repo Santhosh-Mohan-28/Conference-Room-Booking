@@ -71,6 +71,30 @@ export const bookingUpdateSchema = z
     }
   );
 
+export const bookingRequestCreateSchema = z
+  .object({
+    roomId: z.string().min(1, "Room is required"),
+    title: z.string().trim().min(2, "Meeting title must be at least 2 characters").max(150),
+    description: z.string().trim().max(1000).optional().nullable(),
+    startTime: z.string().datetime({ message: "Start time must be a valid ISO datetime" }),
+    endTime: z.string().datetime({ message: "End time must be a valid ISO datetime" }),
+  })
+  .refine(
+    (data) => {
+      const start = new Date(data.startTime);
+      const end = new Date(data.endTime);
+      return end.getTime() > start.getTime();
+    },
+    {
+      message: "End time must be later than start time",
+      path: ["endTime"],
+    }
+  );
+
+export const bookingRequestRejectSchema = z.object({
+  reason: z.string().trim().max(500).optional().nullable(),
+});
+
 export const availabilityQuerySchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD format").optional(),
   startDate: z.string().datetime().optional(),
@@ -80,4 +104,28 @@ export const availabilityQuerySchema = z.object({
   floor: z.coerce.number().int().optional(),
   minCapacity: z.coerce.number().int().optional(),
   view: z.enum(["daily", "weekly", "monthly"]).default("daily"),
+});
+
+export const chatPendingActionSchema = z.object({
+  roomId: z.string(),
+  roomName: z.string(),
+  roomCode: z.string(),
+  date: z.string(),
+  startTime: z.string(),
+  endTime: z.string(),
+  formattedDate: z.string(),
+  title: z.string(),
+  description: z.string().nullable().optional(),
+  organizerName: z.string().optional(),
+  userId: z.string(),
+  userRole: z.enum(["ADMIN", "EMPLOYEE"]),
+  startUTC: z.string(),
+  endUTC: z.string(),
+  confirmationRequired: z.boolean(),
+});
+
+export const chatRequestSchema = z.object({
+  message: z.string().trim().min(1, "Message cannot be empty"),
+  roomContextId: z.string().optional().nullable(),
+  pendingAction: chatPendingActionSchema.optional().nullable(),
 });

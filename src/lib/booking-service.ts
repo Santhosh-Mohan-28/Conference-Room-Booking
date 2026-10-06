@@ -115,7 +115,10 @@ export async function createBooking(params: CreateBookingParams) {
     // Even under high-concurrency race conditions, the PostgreSQL exclusion constraint
     // or transactional isolation ensures no double bookings.
     return await prisma.$transaction(async (tx) => {
-      // Re-verify inside transaction to minimize race window
+      // Lock the room row to guarantee serial execution for bookings on this room
+      await tx.$executeRaw`SELECT id FROM "Room" WHERE id = ${roomId} FOR UPDATE`;
+
+      // Re-verify inside transaction to eliminate race window
       const overlap = await tx.booking.findFirst({
         where: {
           roomId,

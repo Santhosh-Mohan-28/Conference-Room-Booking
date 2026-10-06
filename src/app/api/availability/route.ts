@@ -16,6 +16,8 @@ import {
 import { startOfDay, endOfDay, addDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns";
 import { fromZonedTime, toZonedTime } from "date-fns-tz";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth();

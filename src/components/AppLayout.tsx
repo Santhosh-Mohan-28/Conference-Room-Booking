@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Navbar } from "./Navbar";
 import { Sidebar } from "./Sidebar";
 import { ToastProvider } from "./Toast";
+import { ChatbotDrawer } from "./ChatbotDrawer";
 import { UserSession } from "@/types";
 import { Loader2 } from "lucide-react";
 
@@ -70,6 +71,7 @@ export function AppLayout({ children, requireAdminRole = false }: AppLayoutProps
             </div>
           </main>
         </div>
+        <ChatbotDrawer />
       </div>
     );
   }
@@ -87,6 +89,7 @@ export function AppLayout({ children, requireAdminRole = false }: AppLayoutProps
           {children}
         </main>
       </div>
+      <ChatbotDrawer />
     </div>
   );
 }

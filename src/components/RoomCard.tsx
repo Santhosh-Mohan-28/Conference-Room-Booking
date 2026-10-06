@@ -157,9 +157,16 @@ export function RoomCard({
             </button>
           </div>
         ) : (
-          room.isActive && (
+          room.isActive ? (
+            <Link
+              href={`/bookings/request?roomId=${room.id}`}
+              className="inline-flex items-center space-x-1 text-xs font-semibold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg transition-colors"
+            >
+              <span>Request Booking</span>
+            </Link>
+          ) : (
             <span className="text-[11px] text-slate-400">
-              Contact Admin to book
+              Unavailable
             </span>
           )
         )}

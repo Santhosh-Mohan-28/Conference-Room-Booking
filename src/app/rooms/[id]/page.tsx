@@ -187,8 +187,8 @@ export default function RoomDetailPage() {
             </div>
           </div>
 
-          {/* Admin Action Buttons */}
-          {isAdmin && (
+          {/* Action Buttons */}
+          {isAdmin ? (
             <div className="flex items-center space-x-2.5">
               {room.isActive && (
                 <Link
@@ -225,6 +225,18 @@ export default function RoomDetailPage() {
                 <Trash2 className="w-4 h-4" />
               </button>
             </div>
+          ) : (
+            room.isActive && (
+              <div className="flex items-center space-x-2.5">
+                <Link
+                  href={`/bookings/request?roomId=${room.id}`}
+                  className="inline-flex items-center space-x-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all"
+                >
+                  <CalendarPlus className="w-4 h-4" />
+                  <span>Request Booking</span>
+                </Link>
+              </div>
+            )
           )}
         </div>
 

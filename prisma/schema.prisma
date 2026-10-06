@@ -17,17 +17,26 @@ enum BookingStatus {
   CANCELLED
 }
 
+enum BookingRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
 model User {
-  id                String     @id @default(cuid())
-  microsoftUserId   String?    @unique
+  id                String           @id @default(cuid())
+  microsoftUserId   String?          @unique
   microsoftTenantId String?
   name              String
-  email             String     @unique
-  role              Role       @default(EMPLOYEE)
-  isActive          Boolean    @default(true)
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @updatedAt
+  email             String           @unique
+  role              Role             @default(EMPLOYEE)
+  isActive          Boolean          @default(true)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
   bookings          Booking[]
+  bookingRequests   BookingRequest[] @relation("UserBookingRequests")
+  reviewedRequests  BookingRequest[] @relation("AdminReviewedRequests")
   auditLogs         AuditLog[]
 
   @@index([email])
@@ -35,42 +44,70 @@ model User {
 }
 
 model Room {
-  id          String    @id @default(cuid())
-  roomCode    String    @unique
-  name        String
-  building    String
-  floor       Int
-  capacity    Int
-  description String?
-  equipment   String[]
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  bookings    Booking[]
+  id              String           @id @default(cuid())
+  roomCode        String           @unique
+  name            String
+  building        String
+  floor           Int
+  capacity        Int
+  description     String?
+  equipment       String[]
+  isActive        Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  bookings        Booking[]
+  bookingRequests BookingRequest[]
 
   @@index([isActive])
   @@index([building, floor])
 }
 
 model Booking {
-  id            String        @id @default(cuid())
-  roomId        String
-  room          Room          @relation(fields: [roomId], references: [id], onDelete: Restrict)
-  createdById   String
-  createdBy     User          @relation(fields: [createdById], references: [id])
-  organizerName String
-  title         String
-  description   String?
-  startTime     DateTime
-  endTime       DateTime
-  status        BookingStatus @default(CONFIRMED)
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  cancelledAt   DateTime?
+  id              String           @id @default(cuid())
+  roomId          String
+  room            Room             @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  createdById     String
+  createdBy       User             @relation(fields: [createdById], references: [id])
+  organizerName   String
+  title           String
+  description     String?
+  startTime       DateTime
+  endTime         DateTime
+  status          BookingStatus    @default(CONFIRMED)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  cancelledAt     DateTime?
+  bookingRequests BookingRequest[]
 
   @@index([roomId, startTime, endTime])
   @@index([startTime, endTime])
   @@index([status])
+}
+
+model BookingRequest {
+  id              String               @id @default(cuid())
+  requesterId     String
+  requester       User                 @relation("UserBookingRequests", fields: [requesterId], references: [id])
+  roomId          String
+  room            Room                 @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  title           String
+  description     String?
+  startTime       DateTime
+  endTime         DateTime
+  status          BookingRequestStatus @default(PENDING)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  reviewedAt      DateTime?
+  reviewedById    String?
+  reviewedBy      User?                @relation("AdminReviewedRequests", fields: [reviewedById], references: [id], onDelete: SetNull)
+  rejectionReason String?
+  bookingId       String?
+  booking         Booking?             @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+
+  @@index([requesterId])
+  @@index([roomId, startTime, endTime])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model AuditLog {
