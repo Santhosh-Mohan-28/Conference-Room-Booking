@@ -17,6 +17,7 @@ import {
   Inbox,
   Clock,
   Send,
+  Users,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -101,6 +102,13 @@ export function Sidebar({ user, isOpen, onClose }: SidebarProps) {
       adminOnly: true,
       employeeOnly: false,
     },
+    // Super Admin User Master
+    {
+      label: "User Master",
+      href: "/admin/users",
+      icon: Users,
+      superAdminOnly: true,
+    },
     {
       label: "Profile",
       href: "/profile",
@@ -110,7 +118,8 @@ export function Sidebar({ user, isOpen, onClose }: SidebarProps) {
     },
   ];
 
-  const visibleNav = navItems.filter((item) => {
+  const visibleNav = navItems.filter((item: any) => {
+    if (item.superAdminOnly && !user.isSuperAdmin) return false;
     if (item.adminOnly && !isAdmin) return false;
     if (item.employeeOnly && isAdmin) return false;
     return true;

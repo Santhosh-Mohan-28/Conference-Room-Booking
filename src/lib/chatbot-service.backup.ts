@@ -82,7 +82,7 @@ const ai = process.env.GEMINI_API_KEY
   : null;
 
 const GEMINI_MODEL =
-  process.env.GEMINI_MODEL || "gemini-3.8-flash";
+  process.env.GEMINI_MODEL || "gemini-3.5-flash";
 
 /**
  * Parse a time range deterministically.
@@ -153,21 +153,11 @@ export function parseTimeRange(
    * the natural interpretation is 11 AM to 1 PM.
    */
   if (!startPeriod && endPeriod) {
-  // When only the end has AM/PM:
-  //
-  // 5 to 6pm   -> 17:00 to 18:00
-  // 11 to 1pm  -> 11:00 to 13:00
-  //
-  // If the end hour is numerically smaller than the start hour,
-  // the start naturally belongs to the opposite half of the day.
-  if (endPeriod === "pm" && endHour < startHour) {
-    startPeriod = "am";
-  } else if (endPeriod === "am" && endHour > startHour) {
-    startPeriod = "pm";
-  } else {
-    startPeriod = endPeriod;
+    startPeriod =
+      endPeriod === "pm" && endHour < startHour
+        ? "am"
+        : endPeriod;
   }
-}
 
   if (!startPeriod && !endPeriod) {
     return null;
@@ -605,16 +595,6 @@ async function getAvailabilityForRoom(
   };
 }
 
-async function callGeminiWithTimeout<T>(promise: Promise<T>, timeoutMs = 4000): Promise<T> {
-  let timer: NodeJS.Timeout;
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error("Gemini request timed out")), timeoutMs);
-  });
-  return Promise.race([promise, timeoutPromise]).finally(() => {
-    clearTimeout(timer);
-  });
-}
-
 /**
  * Ask Gemini to understand the user's request.
  *
@@ -639,14 +619,8 @@ async function interpretWithGemini(params: {
     conversationHistory = [],
   } = params;
 
-  const isTest =
-    process.env.NODE_ENV === "test" ||
-    process.env.npm_lifecycle_event === "test" ||
-    Boolean(process.env.NODE_TEST_CONTEXT) ||
-    process.argv.some((arg) => arg.includes("test"));
-
-  if (!ai || isTest) {
-    return fallbackInterpretation(message, pendingAction, roomContextId);
+  if (!ai) {
+    return fallbackInterpretation(message);
   }
 
   const historyText = conversationHistory
@@ -742,11 +716,10 @@ Return ONLY valid JSON matching this shape:
 `;
 
   try {
-    const response = await callGeminiWithTimeout(
-      ai.models.generateContent({
-        model: GEMINI_MODEL,
-        contents: prompt,
-        config: {
+    const response = await ai.models.generateContent({
+      model: GEMINI_MODEL,
+      contents: prompt,
+      config: {
         temperature: 0.1,
         responseMimeType: "application/json",
         responseSchema: {
@@ -802,32 +775,29 @@ Return ONLY valid JSON matching this shape:
           required: ["intent"],
         },
       },
-    }),
-    4000
-  );
+    });
 
     const text = response.text?.trim();
 
     if (!text) {
-      return fallbackInterpretation(message, pendingAction, roomContextId);
+      return fallbackInterpretation(message);
     }
 
     const parsed = JSON.parse(text) as GeminiIntent;
-    const fallback = fallbackInterpretation(message, pendingAction, roomContextId);
 
     return {
-      intent: parsed.intent || fallback.intent || "GENERAL",
-      roomQuery: parsed.roomQuery || fallback.roomQuery || null,
-      dateExpression: parsed.dateExpression || fallback.dateExpression || null,
-      startTime: parsed.startTime || fallback.startTime || null,
-      endTime: parsed.endTime || fallback.endTime || null,
+      intent: parsed.intent || "GENERAL",
+      roomQuery: parsed.roomQuery || null,
+      dateExpression: parsed.dateExpression || null,
+      startTime: parsed.startTime || null,
+      endTime: parsed.endTime || null,
       durationMinutes:
         typeof parsed.durationMinutes === "number"
           ? parsed.durationMinutes
-          : fallback.durationMinutes || null,
-      title: parsed.title || fallback.title || null,
-      description: parsed.description || fallback.description || null,
-      query: parsed.query || fallback.query || null,
+          : null,
+      title: parsed.title || null,
+      description: parsed.description || null,
+      query: parsed.query || null,
     };
   } catch (error) {
     console.error(
@@ -835,7 +805,7 @@ Return ONLY valid JSON matching this shape:
       error
     );
 
-    return fallbackInterpretation(message, pendingAction, roomContextId);
+    return fallbackInterpretation(message);
   }
 }
 
@@ -845,9 +815,7 @@ Return ONLY valid JSON matching this shape:
  * The application remains usable if Gemini is temporarily unavailable.
  */
 function fallbackInterpretation(
-  message: string,
-  pendingAction?: ChatPendingAction | null,
-  roomContextId?: string | null
+  message: string
 ): GeminiIntent {
   const normalized = message
     .trim()
@@ -856,33 +824,6 @@ function fallbackInterpretation(
   const times = parseTimeRange(message);
   const date = parseNaturalLanguageDate(message);
 
-  // If there is an active pending action and user specifies new times or corrections
-  if (pendingAction && times) {
-    return {
-      intent: "BOOK",
-      roomQuery: pendingAction.roomName,
-      dateExpression: date?.dateStr || pendingAction.date,
-      startTime: times.startTime,
-      endTime: times.endTime,
-      durationMinutes: null,
-      title: pendingAction.title,
-      description: pendingAction.description,
-      query: message,
-    };
-  }
-
-  // Extract candidate room query from message
-  let roomQuery: string | null = null;
-  const roomPattern = /\b(?:conference\s+room|room)\s+([a-z0-9_-]+)/i;
-  const match = normalized.match(roomPattern);
-  if (match) {
-    roomQuery = match[0];
-  } else if (/\b(this room|here|current room)\b/i.test(normalized)) {
-    roomQuery = "this room";
-  } else {
-    roomQuery = message;
-  }
-
   if (
     /\b(available|availability|free)\b/.test(
       normalized
@@ -890,7 +831,7 @@ function fallbackInterpretation(
   ) {
     return {
       intent: "CHECK_AVAILABILITY",
-      roomQuery: match ? match[0] : null,
+      roomQuery: null,
       dateExpression: date?.dateStr || null,
       startTime: times?.startTime || null,
       endTime: times?.endTime || null,
@@ -908,7 +849,7 @@ function fallbackInterpretation(
   ) {
     return {
       intent: "GET_SCHEDULE",
-      roomQuery: match ? match[0] : null,
+      roomQuery: null,
       dateExpression: date?.dateStr || null,
       startTime: times?.startTime || null,
       endTime: times?.endTime || null,
@@ -926,7 +867,7 @@ function fallbackInterpretation(
   ) {
     return {
       intent: "BOOK",
-      roomQuery,
+      roomQuery: null,
       dateExpression: date?.dateStr || null,
       startTime: times?.startTime || null,
       endTime: times?.endTime || null,
@@ -972,13 +913,6 @@ function fallbackInterpretation(
 
   return {
     intent: "GENERAL",
-    roomQuery: null,
-    dateExpression: date?.dateStr || null,
-    startTime: times?.startTime || null,
-    endTime: times?.endTime || null,
-    durationMinutes: null,
-    title: null,
-    description: null,
     query: message,
   };
 }
@@ -1006,13 +940,7 @@ async function formulateResponse(params: {
     conversationHistory = [],
   } = params;
 
-  const isTest =
-    process.env.NODE_ENV === "test" ||
-    process.env.npm_lifecycle_event === "test" ||
-    Boolean(process.env.NODE_TEST_CONTEXT) ||
-    process.argv.some((arg) => arg.includes("test"));
-
-  if (!ai || isTest) {
+  if (!ai) {
     return deterministicResponse(
       intent,
       facts,
@@ -1070,16 +998,13 @@ Return only the answer text.
 `;
 
   try {
-    const response = await callGeminiWithTimeout(
-      ai.models.generateContent({
-        model: GEMINI_MODEL,
-        contents: prompt,
-        config: {
-          temperature: 0.2,
-        },
-      }),
-      4000
-    );
+    const response = await ai.models.generateContent({
+      model: GEMINI_MODEL,
+      contents: prompt,
+      config: {
+        temperature: 0.2,
+      },
+    });
 
     return (
       response.text?.trim() ||
@@ -1252,9 +1177,8 @@ function buildPendingAction(params: {
  * Execute an explicitly confirmed pending action.
  *
  * Server-side role is authoritative.
- * Exported so the chat route can call it when wiring the Gemini agent.
  */
-export async function executePendingAction(
+async function executePendingAction(
   pendingAction: ChatPendingAction,
   user: UserSession
 ): Promise<ChatProcessResult> {

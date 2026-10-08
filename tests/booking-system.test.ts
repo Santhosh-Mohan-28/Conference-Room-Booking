@@ -27,8 +27,6 @@ describe("Enterprise Conference Room Booking System - Core Automated Test Suite"
         email: "admin-test@enterprise.com",
         name: "Test Admin",
         role: "ADMIN",
-        microsoftUserId: "ms-test-admin-1",
-        microsoftTenantId: "tenant-test-1",
         isActive: true,
       },
     });
@@ -40,8 +38,6 @@ describe("Enterprise Conference Room Booking System - Core Automated Test Suite"
         email: "emp-test@enterprise.com",
         name: "Test Employee",
         role: "EMPLOYEE",
-        microsoftUserId: "ms-test-emp-1",
-        microsoftTenantId: "tenant-test-1",
         isActive: true,
       },
     });

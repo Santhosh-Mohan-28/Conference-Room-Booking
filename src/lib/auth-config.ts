@@ -1,89 +1,137 @@
 import { NextAuthOptions } from "next-auth";
-import AzureADProvider from "next-auth/providers/azure-ad";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "./prisma";
+import { isSuperAdmin } from "./super-admin";
+import { verifyOtp } from "./otp-service";
+import { otpVerifySchema } from "./validations";
 
-const isDev = process.env.NODE_ENV !== "production";
-const allowDevLogin = isDev && process.env.ENABLE_DEV_LOGIN === "true";
+/**
+ * Resolves an existing user or creates exactly one new user record.
+ * - If user does not exist: creates new user with role EMPLOYEE (or ADMIN if in SUPER_ADMIN_EMAILS) and isActive: true.
+ * - If user already exists: strictly preserves existing role and active status.
+ * - If user is inactive: rejects login.
+ */
+async function resolveOrCreateUser(cleanEmail: string) {
+  const userIsSuperAdmin = isSuperAdmin(cleanEmail);
+  let user = await prisma.user.findUnique({
+    where: { email: cleanEmail },
+  });
+
+  if (!user) {
+    // New User Provisioning:
+    // If in SUPER_ADMIN_EMAILS -> initial role is ADMIN, active: true
+    // Normal users -> strictly EMPLOYEE role, active: true
+    const initialRole = userIsSuperAdmin ? "ADMIN" : "EMPLOYEE";
+    const formattedName =
+      cleanEmail.split("@")[0].replace(/[._-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) ||
+      "Corporate User";
+
+    user = await prisma.user.create({
+      data: {
+        email: cleanEmail,
+        name: userIsSuperAdmin ? "Super Administrator" : formattedName,
+        role: initialRole,
+        isActive: true,
+      },
+    });
+  } else {
+    // Existing user: preserve database role and active status
+    if (!user.isActive) {
+      throw new Error("Your account has been deactivated. Please contact an administrator.");
+    }
+  }
+
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    isActive: user.isActive,
+    isSuperAdmin: userIsSuperAdmin,
+  };
+}
+
+// NOTE: dev-email-login is always registered in the providers array.
+// The authorize function enforces runtime guards: it throws immediately when
+// NODE_ENV === "production" or DEV_BYPASS_AUTH !== "true".
+// Keeping the provider always registered allows tests to access and call authorize()
+// to verify both the happy-path behavior and the production-safety guard.
 
 export const authOptions: NextAuthOptions = {
   providers: [
-    ...(process.env.AZURE_AD_CLIENT_ID && process.env.AZURE_AD_CLIENT_SECRET
-      ? [
-          AzureADProvider({
-            clientId: process.env.AZURE_AD_CLIENT_ID!,
-            clientSecret: process.env.AZURE_AD_CLIENT_SECRET!,
-            tenantId: process.env.AZURE_AD_TENANT_ID || "common",
-            profile(profile) {
-              return {
-                id: profile.oid || profile.sub,
-                name: profile.name,
-                email: profile.email || profile.preferred_username,
-                role: "EMPLOYEE", // Will be resolved against DB in signIn callback
-              };
-            },
-          }),
-        ]
-      : []),
+    // ─────────────────────────────────────────────────────────────────────────
+    // 1. Development Login Bypass Provider
+    // Always registered. authorize() enforces guards at runtime:
+    //   - Rejects if NODE_ENV === "production"
+    //   - Rejects if DEV_BYPASS_AUTH !== "true"
+    // This means it is functionally disabled in production even though it is
+    // present in the array.
+    // ─────────────────────────────────────────────────────────────────────────
+    CredentialsProvider({
+      id: "dev-email-login",
+      name: "Development Email Login",
+      credentials: {
+        email: { label: "Email", type: "email" },
+      },
+      async authorize(credentials) {
+        // Runtime production-safety guard — must be first
+        if (
+          process.env.NODE_ENV === "production" ||
+          process.env.DEV_BYPASS_AUTH !== "true"
+        ) {
+          throw new Error("Development authentication bypass is not permitted in production.");
+        }
 
-    // Strictly isolated development login provider (disabled in production)
-    ...(allowDevLogin
-      ? [
-          CredentialsProvider({
-            id: "dev-mock-login",
-            name: "Enterprise Dev Switch",
-            credentials: {
-              email: { label: "Email", type: "email" },
-              role: { label: "Role", type: "text" },
-            },
-            async authorize(credentials) {
-              if (!credentials?.email) return null;
+        if (!credentials?.email) {
+          throw new Error("Email address is required.");
+        }
 
-              const email = credentials.email.toLowerCase().trim();
-              const requestedRole = credentials.role === "ADMIN" ? "ADMIN" : "EMPLOYEE";
+        const cleanEmail = credentials.email.trim().toLowerCase();
+        if (!cleanEmail || !cleanEmail.includes("@")) {
+          throw new Error("Please enter a valid corporate email address.");
+        }
 
-              // Find or create the user in the database
-              let user = await prisma.user.findUnique({
-                where: { email },
-              });
+        return await resolveOrCreateUser(cleanEmail);
+      },
+    }),
 
-              if (!user) {
-                // Determine initial role: only assign ADMIN if explicitly configured
-                const isAdminConfigured =
-                  email === (process.env.INITIAL_ADMIN_EMAIL || "").toLowerCase();
-                const initialRole = isAdminConfigured ? "ADMIN" : requestedRole;
+    // ─────────────────────────────────────────────────────────────────────────
+    // 2. Production / Standard Email OTP Provider
+    // Always preserved in codebase for production or when DEV_BYPASS_AUTH is false
+    // ─────────────────────────────────────────────────────────────────────────
+    CredentialsProvider({
+      id: "email-otp",
+      name: "Email OTP",
+      credentials: {
+        email: { label: "Email", type: "email" },
+        otp: { label: "OTP", type: "text" },
+      },
+      async authorize(credentials) {
+        if (!credentials?.email || !credentials?.otp) {
+          throw new Error("Both email and 6-digit verification code are required.");
+        }
 
-                user = await prisma.user.create({
-                  data: {
-                    email,
-                    name:
-                      initialRole === "ADMIN"
-                        ? "Enterprise Administrator"
-                        : "Company Employee",
-                    role: initialRole,
-                    microsoftUserId: `dev-ms-${email}`,
-                    microsoftTenantId: process.env.AZURE_AD_TENANT_ID || "dev-tenant-id",
-                    isActive: true,
-                  },
-                });
-              }
+        const validated = otpVerifySchema.safeParse({
+          email: credentials.email,
+          otp: credentials.otp,
+        });
 
-              if (!user.isActive) {
-                throw new Error("This employee account has been deactivated.");
-              }
+        if (!validated.success) {
+          throw new Error("Please provide a valid company email and a 6-digit code.");
+        }
 
-              return {
-                id: user.id,
-                name: user.name,
-                email: user.email,
-                role: user.role,
-                microsoftUserId: user.microsoftUserId,
-                microsoftTenantId: user.microsoftTenantId,
-              };
-            },
-          }),
-        ]
-      : []),
+        const { email, otp } = validated.data;
+
+        // Verify OTP server-side
+        const verification = await verifyOtp(email, otp);
+        if (!verification.valid) {
+          throw new Error(verification.error || "Invalid verification code.");
+        }
+
+        // Resolve or provision user
+        return await resolveOrCreateUser(email);
+      },
+    }),
   ],
 
   session: {
@@ -97,100 +145,25 @@ export const authOptions: NextAuthOptions = {
   },
 
   callbacks: {
-    async signIn({ user, account, profile }) {
-      if (!user.email) return false;
-
-      // Handle Microsoft Entra ID OAuth sign in
-      if (account?.provider === "azure-ad") {
-        const configuredTenant = process.env.AZURE_AD_TENANT_ID;
-        const profileTenant = (profile as any)?.tid;
-
-        // Verify that the account belongs to the configured company Microsoft Entra tenant
-        if (configuredTenant && configuredTenant !== "common" && profileTenant) {
-          if (configuredTenant !== profileTenant) {
-            console.error(
-              `Tenant mismatch: expected ${configuredTenant}, received ${profileTenant}`
-            );
-            return false;
-          }
-        }
-
-        const msUserId = (profile as any)?.oid || (profile as any)?.sub;
-        const initialAdminMsId = process.env.INITIAL_ADMIN_MICROSOFT_ID;
-        const initialAdminEmail = (process.env.INITIAL_ADMIN_EMAIL || "").toLowerCase();
-
-        // Find or provision user in DB
-        let dbUser = await prisma.user.findFirst({
-          where: {
-            OR: [
-              { microsoftUserId: msUserId },
-              { email: user.email.toLowerCase() },
-            ],
-          },
-        });
-
-        if (!dbUser) {
-          // Provision new user. New users receive EMPLOYEE role unless explicitly matching configured initial admin
-          const shouldBeAdmin =
-            (initialAdminMsId && msUserId === initialAdminMsId) ||
-            (initialAdminEmail && user.email.toLowerCase() === initialAdminEmail);
-
-          dbUser = await prisma.user.create({
-            data: {
-              email: user.email.toLowerCase(),
-              name: user.name || "Enterprise User",
-              microsoftUserId: msUserId,
-              microsoftTenantId: profileTenant || configuredTenant,
-              role: shouldBeAdmin ? "ADMIN" : "EMPLOYEE",
-              isActive: true,
-            },
-          });
-        } else {
-          // Update Microsoft ID/Tenant ID if missing
-          if (!dbUser.microsoftUserId && msUserId) {
-            dbUser = await prisma.user.update({
-              where: { id: dbUser.id },
-              data: {
-                microsoftUserId: msUserId,
-                microsoftTenantId: profileTenant || configuredTenant,
-              },
-            });
-          }
-        }
-
-        if (!dbUser.isActive) {
-          console.warn(`Deactivated user ${user.email} attempted login.`);
-          return false;
-        }
-
-        // Attach database attributes to user
-        user.id = dbUser.id;
-        (user as any).role = dbUser.role;
-        (user as any).microsoftUserId = dbUser.microsoftUserId;
-        (user as any).microsoftTenantId = dbUser.microsoftTenantId;
-      }
-
-      return true;
-    },
-
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
         token.role = (user as any).role;
-        token.microsoftUserId = (user as any).microsoftUserId;
-        token.microsoftTenantId = (user as any).microsoftTenantId;
+        token.isSuperAdmin = (user as any).isSuperAdmin ?? isSuperAdmin(user.email);
+        token.isActive = (user as any).isActive ?? true;
       }
 
-      // Periodically refresh role from DB in case an admin changed it
+      // Periodically refresh role and active status from DB
       if (token.id) {
         try {
           const freshUser = await prisma.user.findUnique({
             where: { id: token.id as string },
-            select: { role: true, isActive: true },
+            select: { email: true, role: true, isActive: true },
           });
           if (freshUser) {
             token.role = freshUser.role;
             token.isActive = freshUser.isActive;
+            token.isSuperAdmin = isSuperAdmin(freshUser.email);
           }
         } catch (e) {
           // ignore transient DB query issues during token cycle
@@ -204,8 +177,7 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         (session.user as any).id = token.id;
         (session.user as any).role = token.role;
-        (session.user as any).microsoftUserId = token.microsoftUserId;
-        (session.user as any).microsoftTenantId = token.microsoftTenantId;
+        (session.user as any).isSuperAdmin = token.isSuperAdmin ?? isSuperAdmin(session.user.email);
         (session.user as any).isActive = token.isActive ?? true;
       }
       return session;

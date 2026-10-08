@@ -7,8 +7,19 @@ export interface UserSession {
   name: string;
   email: string;
   role: Role;
-  microsoftUserId?: string | null;
-  microsoftTenantId?: string | null;
+  isSuperAdmin?: boolean;
+  isActive?: boolean;
+}
+
+export interface UserData {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+  isActive: boolean;
+  isSuperAdmin: boolean;
+  createdAt: string | Date;
+  updatedAt: string | Date;
 }
 
 export interface RoomData {

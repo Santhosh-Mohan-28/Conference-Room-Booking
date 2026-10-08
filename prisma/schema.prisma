@@ -25,22 +25,33 @@ enum BookingRequestStatus {
 }
 
 model User {
-  id                String           @id @default(cuid())
-  microsoftUserId   String?          @unique
-  microsoftTenantId String?
-  name              String
-  email             String           @unique
-  role              Role             @default(EMPLOYEE)
-  isActive          Boolean          @default(true)
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
-  bookings          Booking[]
-  bookingRequests   BookingRequest[] @relation("UserBookingRequests")
-  reviewedRequests  BookingRequest[] @relation("AdminReviewedRequests")
-  auditLogs         AuditLog[]
+  id               String           @id @default(cuid())
+  name             String
+  email            String           @unique
+  role             Role             @default(EMPLOYEE)
+  isActive         Boolean          @default(true)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  bookings         Booking[]
+  bookingRequests  BookingRequest[] @relation("UserBookingRequests")
+  reviewedRequests BookingRequest[] @relation("AdminReviewedRequests")
+  auditLogs        AuditLog[]
 
   @@index([email])
-  @@index([microsoftUserId, microsoftTenantId])
+}
+
+model EmailOtp {
+  id          String   @id @default(cuid())
+  email       String
+  otpHash     String
+  expiresAt   DateTime
+  attempts    Int      @default(0)
+  maxAttempts Int      @default(5)
+  used        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([email])
+  @@index([expiresAt])
 }
 
 model Room {

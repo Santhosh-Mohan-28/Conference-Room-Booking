@@ -13,9 +13,14 @@ import { Loader2 } from "lucide-react";
 interface AppLayoutProps {
   children: React.ReactNode;
   requireAdminRole?: boolean;
+  requireSuperAdminRole?: boolean;
 }
 
-export function AppLayout({ children, requireAdminRole = false }: AppLayoutProps) {
+export function AppLayout({
+  children,
+  requireAdminRole = false,
+  requireSuperAdminRole = false,
+}: AppLayoutProps) {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -41,6 +46,39 @@ export function AppLayout({ children, requireAdminRole = false }: AppLayoutProps
   }
 
   const user = session.user as unknown as UserSession;
+
+  if (requireSuperAdminRole && !user.isSuperAdmin) {
+    return (
+      <div className="min-h-screen flex flex-col bg-slate-50">
+        <Navbar user={user} onMenuToggle={() => setIsMobileMenuOpen(!isMobileMenuOpen)} />
+        <div className="flex flex-1">
+          <Sidebar
+            user={user}
+            isOpen={isMobileMenuOpen}
+            onClose={() => setIsMobileMenuOpen(false)}
+          />
+          <main className="flex-1 p-6 md:p-8 flex items-center justify-center">
+            <div className="max-w-md w-full bg-white p-8 rounded-2xl border border-slate-200 shadow-sm text-center">
+              <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center mx-auto mb-4 font-bold text-lg">
+                !
+              </div>
+              <h2 className="text-xl font-bold text-slate-900 mb-2">Super Admin Required</h2>
+              <p className="text-sm text-slate-600 mb-6">
+                User Master access is strictly restricted to configured <strong>Super Administrators</strong>.
+              </p>
+              <button
+                onClick={() => router.push("/dashboard")}
+                className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl shadow-sm transition-colors"
+              >
+                Return to Dashboard
+              </button>
+            </div>
+          </main>
+        </div>
+        <ChatbotDrawer />
+      </div>
+    );
+  }
 
   if (requireAdminRole && user.role !== "ADMIN") {
     return (

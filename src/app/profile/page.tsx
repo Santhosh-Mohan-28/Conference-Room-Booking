@@ -77,20 +77,20 @@ export default function ProfilePage() {
             <div className="flex items-center justify-between py-2 border-b border-slate-100 text-xs">
               <span className="text-slate-500 flex items-center space-x-2">
                 <Key className="w-4 h-4 text-slate-400" />
-                <span>Microsoft User ID (OID):</span>
+                <span>Authentication Method:</span>
               </span>
-              <span className="font-mono text-slate-600 text-[11px]">
-                {user?.microsoftUserId || "Configured via Entra ID"}
+              <span className="font-semibold text-slate-700 text-xs">
+                Passwordless Email + OTP
               </span>
             </div>
 
             <div className="flex items-center justify-between py-2 border-b border-slate-100 text-xs">
               <span className="text-slate-500 flex items-center space-x-2">
                 <Building2 className="w-4 h-4 text-slate-400" />
-                <span>Microsoft Tenant ID:</span>
+                <span>Account Status:</span>
               </span>
-              <span className="font-mono text-slate-600 text-[11px]">
-                {user?.microsoftTenantId || "Configured via Entra ID"}
+              <span className="font-semibold text-emerald-600 text-xs flex items-center space-x-1">
+                <span>Active</span>
               </span>
             </div>
 

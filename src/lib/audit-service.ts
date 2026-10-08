@@ -11,13 +11,16 @@ export type AuditAction =
   | "BOOKING_CANCELLED"
   | "BOOKING_REQUEST_CREATED"
   | "BOOKING_REQUEST_APPROVED"
-  | "BOOKING_REQUEST_REJECTED";
+  | "BOOKING_REQUEST_REJECTED"
+  | "USER_ACCESS_GRANTED"
+  | "USER_ROLE_UPDATED"
+  | "USER_STATUS_UPDATED";
 
 export interface LogAuditParams {
   actorId?: string | null;
   actorEmail?: string | null;
   action: AuditAction;
-  targetType: "ROOM" | "BOOKING" | "BOOKING_REQUEST";
+  targetType: "ROOM" | "BOOKING" | "BOOKING_REQUEST" | "USER";
   targetId: string;
   details?: Record<string, any>;
 }
