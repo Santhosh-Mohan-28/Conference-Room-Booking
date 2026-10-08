@@ -700,10 +700,22 @@ export async function runGeminiChatAgent(
         ctx.pendingAction = result.pendingAction;
       }
 
+      // Build the function-response Part using the exact structure
+      // required by @google/genai 2.27.0:
+      //
+      //   Part.functionResponse: FunctionResponse
+      //     .id      — must echo call.id when present (multi-call matching)
+      //     .name    — must match call.name
+      //     .response — MUST be Record<string, unknown>, never a bare array.
+      //                 Wrap the tool result under the "output" key so arrays
+      //                 and objects are always serialized as a JSON object.
+      //                 The proto field is singular, not repeated — passing a
+      //                 raw array here causes the 400 "cannot start list" error.
       responses.push({
         functionResponse: {
+          ...(call.id ? { id: call.id } : {}),
           name: call.name,
-          response: result,
+          response: { output: result },
         },
       });
     }
